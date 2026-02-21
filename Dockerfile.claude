@@ -53,6 +53,13 @@ USER ${USER_ID}
 # Set working directory
 WORKDIR /workspace
 
-# Default command runs Claude Code with Ralph Wiggum prompt
-ENTRYPOINT ["claude"]
-CMD ["./ralph-wiggum.md", "--dangerously-skip-permissions", "-p", "This is your instruction file. Execute it immediately. Check .ralph/progress.md and do the next task. Do not summarize or ask questions."]
+# Entrypoint script: restore .claude.json from backup if missing, then run claude
+ENTRYPOINT ["sh", "-c", "\
+    if [ ! -f \"$HOME/.claude.json\" ] && [ -d \"$HOME/.claude/backups\" ]; then \
+        BACKUP=$(ls -t \"$HOME/.claude/backups/.claude.json.backup.\"* 2>/dev/null | head -1); \
+        if [ -n \"$BACKUP\" ]; then \
+            cp \"$BACKUP\" \"$HOME/.claude.json\"; \
+        fi; \
+    fi; \
+    exec claude \"$@\"", "--"]
+CMD ["./ralph-wiggum.md", "--dangerously-skip-permissions", "-p", "This is your instruction file. Execute it immediately. Check .ralph-wiggum/progress.md and do the next task. Do not summarize or ask questions."]

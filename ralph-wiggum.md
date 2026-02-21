@@ -17,7 +17,13 @@ Ralph Wiggum is a feature-driven coding agent using Test-Driven Development (TDD
 │       │                                                         │
 │       ▼                                                         │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │  Check .ralph/progress.md                               │    │
+│  │  PICK-NEXT-FEATURE exists?                              │    │
+│  │  YES → write NEXT-FEATURE (slug + id), EXIT             │    │
+│  │  NO  → continue below                                   │    │
+│  └────────────────────────┬────────────────────────────────┘    │
+│                           │                                     │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │  Check .ralph-wiggum/progress.md                        │    │
 │  └────────────────────────┬────────────────────────────────┘    │
 │                           │                                     │
 │       ┌───────────────────┼───────────────────┐                 │
@@ -33,20 +39,13 @@ Ralph Wiggum is a feature-driven coding agent using Test-Driven Development (TDD
 │  │ specs/   │      │ first    │      │ Perfection    │          │
 │  │ Generate │      │ [ ] task │      │ Review        │          │
 │  │ tasks    │      │ TDD:     │      │               │          │
-│  │ for      │      │ RED/     │      │ All features  │          │
-│  │ first    │      │ GREEN/   │      │ complete? ────┼── YES ──┐│
-│  │ feature  │      │ REFACTOR │      │               │         ││
-│  │ COMMIT   │      │ Mark [x] │      │ NO: Generate  │         ││
-│  │ EXIT     │      │ COMMIT   │      │ next feature  │         ││
-│                    │ EXIT     │      │ tasks         │         ││
-│                    └──────────┘      └───────────────┘         ││
-│                                                                ││
-│                         ┌──────────────────────────────────────┘│
-│                         ▼                                       │
-│                 ┌───────────────┐                               │
-│                 │  DEVELOPMENT  │                               │
-│                 │   COMPLETE    │                               │
-│                 └───────────────┘                               │
+│  │ for      │      │ RED/     │      │ All pass →    │          │
+│  │ current  │      │ GREEN/   │      │ Create        │          │
+│  │ feature  │      │ REFACTOR │      │ COMPLETE      │          │
+│  │ EXIT     │      │ Mark [x] │      │ marker        │          │
+│                    │ COMMIT   │      │ EXIT          │          │
+│                    │ EXIT     │      └───────────────┘          │
+│                    └──────────┘                                  │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -77,7 +76,7 @@ Each feature is complete when:
 ## 3. Folder Structure
 
 ```
-.ralph/
+.ralph-wiggum/
 ├── progress.md                         # Task tracking
 ├── CURRENT-FEATURE.md                  # Current feature being implemented
 │
@@ -133,25 +132,37 @@ Each feature is complete when:
 
 ## 5. Agent Behavior
 
+### 5.0 Feature Selection Mode
+
+**HIGHEST PRIORITY CHECK.** Before anything else, check if `.ralph-wiggum/PICK-NEXT-FEATURE` exists. If it does:
+
+1. Read `specs/features.md` to get the full list of features
+2. Read `.ralph-wiggum/completed.txt` (if it exists) to see which features are done
+3. Find the first feature that is NOT in the completed list
+4. If all features are complete: do NOT create NEXT-FEATURE. EXIT immediately.
+5. Write `.ralph-wiggum/NEXT-FEATURE` with exactly two lines:
+   - **Line 1:** A short slug for the branch name (lowercase, hyphens, no numbers prefix). Example: for "F-01: Shared Types Crate" write `shared-types-crate`
+   - **Line 2:** The feature identifier as it appears in the header (e.g. `F-01` or `1`)
+6. EXIT immediately. Do nothing else.
+
 ### 5.1 On Start - No Tasks
 
-When `.ralph/progress.md` doesn't exist:
+When `.ralph-wiggum/PICK-NEXT-FEATURE` does NOT exist, and `.ralph-wiggum/progress.md` doesn't exist:
 
 1. **Read `specs/` directory** to understand the project:
    - `specs/features.md` for feature list
    - Other spec files for tech stack, architecture, coding standards
-2. **Create CURRENT-FEATURE.md** with the first feature (section `## 1.` from features.md)
-3. **Generate tasks for first feature only**:
+2. **Create CURRENT-FEATURE.md** with the current feature (from specs/features.md)
+3. **Generate tasks for current feature only**:
    - Break feature into testable user stories based on its subsections
    - Create TDD triplets: test → implement → review
-   - End with `F1-XX-feature-perfection-review.md`
-4. **Create progress.md** with first feature tasks
-5. **Commit**: `git add .ralph && git commit -m "ralph: generate F1 tasks"`
-6. **Exit**
+   - End with `F{N}-XX-feature-perfection-review.md`
+4. **Create progress.md** with feature tasks
+5. **Exit**
 
 ### 5.2 On Start - Pending Tasks
 
-When `.ralph/progress.md` has unchecked `[ ]` tasks:
+When `.ralph-wiggum/progress.md` has unchecked `[ ]` tasks:
 
 1. **Find first unchecked task** `[ ] FN-XX-task-name.md`
 2. **Read task file**
@@ -191,13 +202,7 @@ When executing `*-feature-perfection-review.md`:
 
 6. **All checks pass**:
    - Move feature to "Completed Features" in progress.md
-   - Read specs/features.md to find the next feature section
-   - Update CURRENT-FEATURE.md to next feature
-   - Generate tasks for next feature
-   - Commit and EXIT
-
-7. **If all features from specs/features.md are complete**:
-   - Print "RALPH WIGGUM: DEVELOPMENT COMPLETE"
+   - Create `.ralph-wiggum/COMPLETE` file (contents: feature number and name)
    - EXIT
 
 ### 5.4 TDD Acceptance Criteria
@@ -336,8 +341,8 @@ Verify Feature {N} ({Feature Name}) is complete and production-ready.
 ## If All Pass
 
 - Move F{N} to "Completed Features"
-- Generate F{N+1} tasks (next feature from specs/features.md)
-- Commit and EXIT
+- Create .ralph-wiggum/COMPLETE file (contents: feature number and name)
+- EXIT
 
 ## If Any Fail
 
@@ -358,15 +363,17 @@ EXECUTE IMMEDIATELY. NO CONFIRMATION NEEDED.
 KEY FILES:
 - specs/features.md - Feature requirements (read dynamically)
 - specs/ - Project architecture, coding standards, tech stack
-- .ralph/progress.md - Task tracking
-- .ralph/CURRENT-FEATURE.md - Current feature being implemented
+- .ralph-wiggum/progress.md - Task tracking
+- .ralph-wiggum/CURRENT-FEATURE.md - Current feature being implemented
 
 WORKFLOW:
-1. Check .ralph/progress.md
-2. If no tasks: read specs/, generate tasks for first feature
+0. FIRST: if .ralph-wiggum/PICK-NEXT-FEATURE exists → feature selection mode:
+   read specs/features.md + completed.txt, write NEXT-FEATURE (line 1: slug, line 2: feature id), EXIT
+1. Check .ralph-wiggum/progress.md
+2. If no tasks: read specs/, generate tasks for current feature, EXIT
 3. If pending tasks: execute FIRST [ ] task
 4. If all tasks [x]: run feature-perfection-review
-5. ONE task per session, always COMMIT, then EXIT
+5. ONE task per session, always COMMIT (except task generation), then EXIT
 
 TDD RULES:
 - *-test-*.md → RED: tests MUST FAIL
@@ -380,15 +387,15 @@ FEATURE PERFECTION REVIEW:
 3. No TODOs in code
 4. Project linter clean
 5. No hardcoded values that belong in persistent storage
-→ If ALL pass: generate next feature tasks
+→ If ALL pass: create .ralph-wiggum/COMPLETE marker, EXIT
 → If ANY fail: create fix tasks
 
 FEATURE DISCOVERY:
-- Features = numbered sections (## 1., ## 2., ...) in specs/features.md
-- Implement in section order
-- After LAST feature's perfection review passes: DEVELOPMENT COMPLETE
+- Features come from specs/features.md (any heading format)
+- Implement in document order
+- The orchestrator handles feature sequencing; agent works on one feature per worktree
 
 GIT COMMITS:
-- Task generation: `git add .ralph && git commit -m "ralph: generate F{N} tasks"`
 - Task execution: `git add -A && git commit -m "ralph: F{N}-{NN}-task-name"`
+- .ralph-wiggum/ is gitignored — task files are local state, not committed
 ```
