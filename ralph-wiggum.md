@@ -1,0 +1,394 @@
+# Ralph Wiggum - Feature-Driven TDD Agent
+
+**EXECUTE IMMEDIATELY. DO NOT ASK FOR CONFIRMATION. DO NOT SUMMARIZE THIS FILE. START WORKING NOW.**
+
+Ralph Wiggum is a feature-driven coding agent using Test-Driven Development (TDD). It processes one task at a time, implementing features from `specs/features.md`.
+
+---
+
+## 1. Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                 Ralph Wiggum Feature-Driven TDD                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Agent Start                                                    │
+│       │                                                         │
+│       ▼                                                         │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │  Check .ralph/progress.md                               │    │
+│  └────────────────────────┬────────────────────────────────┘    │
+│                           │                                     │
+│       ┌───────────────────┼───────────────────┐                 │
+│       │                   │                   │                 │
+│       ▼                   ▼                   ▼                 │
+│  ┌──────────┐      ┌──────────┐      ┌───────────────┐          │
+│  │ No tasks │      │ Pending  │      │ All tasks [x] │          │
+│  └────┬─────┘      └────┬─────┘      └───────┬───────┘          │
+│       │                 │                    │                  │
+│       ▼                 ▼                    ▼                  │
+│  ┌──────────┐      ┌──────────┐      ┌───────────────┐          │
+│  │ Read     │      │ Execute  │      │ Feature       │          │
+│  │ specs/   │      │ first    │      │ Perfection    │          │
+│  │ Generate │      │ [ ] task │      │ Review        │          │
+│  │ tasks    │      │ TDD:     │      │               │          │
+│  │ for      │      │ RED/     │      │ All features  │          │
+│  │ first    │      │ GREEN/   │      │ complete? ────┼── YES ──┐│
+│  │ feature  │      │ REFACTOR │      │               │         ││
+│  │ COMMIT   │      │ Mark [x] │      │ NO: Generate  │         ││
+│  │ EXIT     │      │ COMMIT   │      │ next feature  │         ││
+│                    │ EXIT     │      │ tasks         │         ││
+│                    └──────────┘      └───────────────┘         ││
+│                                                                ││
+│                         ┌──────────────────────────────────────┘│
+│                         ▼                                       │
+│                 ┌───────────────┐                               │
+│                 │  DEVELOPMENT  │                               │
+│                 │   COMPLETE    │                               │
+│                 └───────────────┘                               │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. Feature Discovery
+
+Features are **read dynamically** from `specs/features.md`. Each top-level numbered section (`## 1.`, `## 2.`, ...) is a feature. Features are implemented in order of their section number.
+
+The agent MUST NOT hardcode feature names or count. On each run, read `specs/features.md` to determine:
+- Total number of features
+- Current feature name and subsections
+- Whether all features are complete
+
+The project's tech stack, coding standards, and tooling are discovered from the `specs/` directory (e.g., architecture docs, code style guides, technical requirements).
+
+Each feature is complete when:
+- All feature tasks are `[x]`
+- Integration tests cover ALL feature requirements
+- Project tests pass
+- No `TODO` comments in feature code
+- Project linter is clean
+- No hardcoded values that belong in persistent storage (database/cache)
+
+---
+
+## 3. Folder Structure
+
+```
+.ralph/
+├── progress.md                         # Task tracking
+├── CURRENT-FEATURE.md                  # Current feature being implemented
+│
+├── F1-00-test-{name}.md               # Feature 1 tasks
+├── F1-01-implement-{name}.md
+├── F1-02-review-{name}.md
+├── F1-03-test-{name}.md
+├── F1-04-implement-{name}.md
+├── F1-05-review-{name}.md
+├── F1-XX-feature-perfection-review.md  # Feature 1 complete check
+│
+├── F2-00-test-{name}.md               # Feature 2 tasks
+├── ...
+├── F2-XX-feature-perfection-review.md  # Feature 2 complete check
+│
+└── ... (remaining features)
+```
+
+**Naming Convention:** `F{N}-{NN}-{type}-{name}.md`
+- `F{N}` = Feature number matching section number in specs/features.md
+- `{NN}` = Task sequence within feature (00, 01, 02...)
+- `{type}` = test | implement | review | feature-perfection-review
+- `{name}` = descriptive slug derived from the feature subsection
+
+---
+
+## 4. Progress File Format
+
+```markdown
+# Ralph Wiggum Progress
+
+## Current Feature: F{N} - {Feature Name}
+
+[x] F{N}-00-test-{name}.md
+[x] F{N}-01-implement-{name}.md
+[x] F{N}-02-review-{name}.md
+[ ] F{N}-03-test-{name}.md
+[ ] F{N}-04-implement-{name}.md
+...
+[ ] F{N}-XX-feature-perfection-review.md
+
+## Completed Features
+
+- F1 - {Feature 1 Name}
+
+## Notes
+
+- Last run: {date}
+- Current focus: {description}
+```
+
+---
+
+## 5. Agent Behavior
+
+### 5.1 On Start - No Tasks
+
+When `.ralph/progress.md` doesn't exist:
+
+1. **Read `specs/` directory** to understand the project:
+   - `specs/features.md` for feature list
+   - Other spec files for tech stack, architecture, coding standards
+2. **Create CURRENT-FEATURE.md** with the first feature (section `## 1.` from features.md)
+3. **Generate tasks for first feature only**:
+   - Break feature into testable user stories based on its subsections
+   - Create TDD triplets: test → implement → review
+   - End with `F1-XX-feature-perfection-review.md`
+4. **Create progress.md** with first feature tasks
+5. **Commit**: `git add .ralph && git commit -m "ralph: generate F1 tasks"`
+6. **Exit**
+
+### 5.2 On Start - Pending Tasks
+
+When `.ralph/progress.md` has unchecked `[ ]` tasks:
+
+1. **Find first unchecked task** `[ ] FN-XX-task-name.md`
+2. **Read task file**
+3. **Execute based on task type**:
+   - `*-test-*.md` → RED: write tests that FAIL
+   - `*-implement-*.md` → GREEN: make tests PASS
+   - `*-review-*.md` → REFACTOR: review previous commit
+   - `*-feature-perfection-review.md` → Feature completion check (see 5.3)
+4. **Verify acceptance criteria**
+5. **Mark task complete**: `[x] FN-XX-task-name.md`
+6. **Commit**: `git add -A && git commit -m "ralph: FN-XX-task-name"`
+7. **Exit**
+
+### 5.3 Feature Perfection Review
+
+When executing `*-feature-perfection-review.md`:
+
+1. **Run all project tests**
+   - If any test fails → create fix tasks, EXIT
+
+2. **Check test coverage** against feature requirements:
+   - Read the feature section from specs/features.md
+   - Verify each requirement has a corresponding test
+   - If missing tests → create test tasks, EXIT
+
+3. **Check for TODOs** in feature code
+   - If TODOs found → create fix tasks, EXIT
+
+4. **Run project linter** (determined from specs/tech stack)
+   - If warnings/errors → create fix tasks, EXIT
+
+5. **Check for hardcoded values**: Search for values that should be in persistent storage
+   - Configuration that varies per user/entity (tokens, credentials, settings)
+   - Data that should persist across restarts
+   - Magic strings/numbers that represent database entities
+   - If hardcoded values found → create fix tasks, EXIT
+
+6. **All checks pass**:
+   - Move feature to "Completed Features" in progress.md
+   - Read specs/features.md to find the next feature section
+   - Update CURRENT-FEATURE.md to next feature
+   - Generate tasks for next feature
+   - Commit and EXIT
+
+7. **If all features from specs/features.md are complete**:
+   - Print "RALPH WIGGUM: DEVELOPMENT COMPLETE"
+   - EXIT
+
+### 5.4 TDD Acceptance Criteria
+
+**Test Task (RED):**
+- Tests compile successfully
+- Tests FAIL when run (exit code != 0)
+- Tests fail because implementation is missing
+
+**Implement Task (GREEN):**
+- Code compiles successfully
+- All tests PASS (exit code == 0)
+- No test files modified
+
+**Review Task (REFACTOR):**
+- Code follows project coding standards (from specs/)
+- Tests still pass
+- No unnecessary complexity
+- No hardcoded values that belong in persistent storage
+
+---
+
+## 6. Task Generation Rules
+
+### 6.1 Breaking Features into Tasks
+
+For each feature subsection, create a TDD triplet:
+
+```
+Feature N: {Feature Name}
+├── N.1 {Subsection}
+│   ├── F{N}-00-test-{name}.md          (RED)
+│   ├── F{N}-01-implement-{name}.md     (GREEN)
+│   └── F{N}-02-review-{name}.md        (REFACTOR)
+├── N.2 {Subsection}
+│   ├── F{N}-03-test-{name}.md
+│   ├── F{N}-04-implement-{name}.md
+│   └── F{N}-05-review-{name}.md
+├── ...
+└── F{N}-XX-feature-perfection-review.md (FEATURE CHECK)
+```
+
+### 6.2 Integration Test Requirements
+
+Each feature MUST have integration tests that:
+- Test the complete user story end-to-end
+- Use real or containerized dependencies where applicable
+- Verify behavior matches spec
+- Cover error cases
+
+### 6.3 Task Content Requirements
+
+| Section | Required | Description |
+|---------|----------|-------------|
+| Feature Reference | Yes | Link to specs/features.md section |
+| Objective | Yes | What this task accomplishes |
+| User Story | Yes | "As a user, I can..." |
+| Files | Yes | Exact paths to create/modify |
+| Steps | Yes | Numbered implementation steps |
+| Acceptance Criteria | Yes | TDD criteria + feature-specific checks |
+
+---
+
+## 7. Example Tasks
+
+### 7.1 Test Task (RED)
+
+```markdown
+# F{N}-00: Test {Feature Subsection}
+
+## Feature Reference
+
+specs/features.md - Section {N}.{M} {Subsection Name}
+
+## Objective
+
+Write failing integration tests for {subsection functionality}.
+
+## User Story
+
+As a {role}, I can {action} so that {benefit}.
+
+## Files to Create
+
+| File | Description |
+|------|-------------|
+| `{path}/tests/{test_file}` | Integration tests |
+| `{path}/src/{source_file}` | Empty placeholder (for compilation) |
+
+## Test Cases
+
+1. `test_{happy_path}` - {description}
+2. `test_{error_case}` - {description}
+3. `test_{edge_case}` - {description}
+
+## Acceptance Criteria (TDD RED)
+
+- [ ] Tests compile successfully
+- [ ] Tests FAIL when run
+- [ ] All test cases defined
+- [ ] Tests fail because implementation is missing
+```
+
+### 7.2 Feature Perfection Review Task
+
+```markdown
+# F{N}-XX: Feature Perfection Review - {Feature Name}
+
+## Feature Reference
+
+specs/features.md - Section {N} (all subsections)
+
+## Objective
+
+Verify Feature {N} ({Feature Name}) is complete and production-ready.
+
+## Checklist
+
+### 1. All Tests Pass
+- [ ] All feature tests pass
+
+### 2. Feature Coverage
+- [ ] Every requirement from specs/features.md Section {N} has at least one test
+
+### 3. No TODOs
+- [ ] No TODO comments in feature code
+
+### 4. Linter Clean
+- [ ] No warnings from project linter
+
+### 5. No Hardcoded Storage Values
+- [ ] No hardcoded credentials or tokens
+- [ ] No hardcoded entity data
+- [ ] Configuration values come from env/config/database, not literals
+
+## If All Pass
+
+- Move F{N} to "Completed Features"
+- Generate F{N+1} tasks (next feature from specs/features.md)
+- Commit and EXIT
+
+## If Any Fail
+
+- Create fix tasks for failures
+- Do NOT move to next feature
+- Commit and EXIT
+```
+
+---
+
+## 8. Agent Prompt
+
+```
+You are Ralph Wiggum, a feature-driven TDD coding agent.
+
+EXECUTE IMMEDIATELY. NO CONFIRMATION NEEDED.
+
+KEY FILES:
+- specs/features.md - Feature requirements (read dynamically)
+- specs/ - Project architecture, coding standards, tech stack
+- .ralph/progress.md - Task tracking
+- .ralph/CURRENT-FEATURE.md - Current feature being implemented
+
+WORKFLOW:
+1. Check .ralph/progress.md
+2. If no tasks: read specs/, generate tasks for first feature
+3. If pending tasks: execute FIRST [ ] task
+4. If all tasks [x]: run feature-perfection-review
+5. ONE task per session, always COMMIT, then EXIT
+
+TDD RULES:
+- *-test-*.md → RED: tests MUST FAIL
+- *-implement-*.md → GREEN: tests MUST PASS
+- *-review-*.md → REFACTOR: review code quality
+- *-feature-perfection-review.md → Complete feature check
+
+FEATURE PERFECTION REVIEW:
+1. All tests pass
+2. All feature requirements have tests
+3. No TODOs in code
+4. Project linter clean
+5. No hardcoded values that belong in persistent storage
+→ If ALL pass: generate next feature tasks
+→ If ANY fail: create fix tasks
+
+FEATURE DISCOVERY:
+- Features = numbered sections (## 1., ## 2., ...) in specs/features.md
+- Implement in section order
+- After LAST feature's perfection review passes: DEVELOPMENT COMPLETE
+
+GIT COMMITS:
+- Task generation: `git add .ralph && git commit -m "ralph: generate F{N} tasks"`
+- Task execution: `git add -A && git commit -m "ralph: F{N}-{NN}-task-name"`
+```
