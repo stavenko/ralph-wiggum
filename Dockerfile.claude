@@ -1,5 +1,5 @@
-# Claude Code + Rust Development Environment
-# For running Ralph Wiggum incremental coding agent
+# Ralph Wiggum - Claude Code + Rust Development Environment
+# Standalone TDD agent Docker image (installed via install.sh)
 
 FROM rust:bookworm
 

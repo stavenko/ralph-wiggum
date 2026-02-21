@@ -1,0 +1,175 @@
+#!/bin/bash
+
+set -euo pipefail
+
+CONFIG_DIR="$HOME/.config/ralph-wiggum"
+IMAGE_NAME="ralph-wiggum"
+USERNAME=$(whoami)
+
+do_init() {
+    # Validate: must be in a git repo
+    if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+        echo "Error: not inside a git repository."
+        exit 1
+    fi
+
+    # Validate: specs/features.md must exist
+    if [ ! -f "specs/features.md" ]; then
+        echo "Error: specs/features.md not found in $(pwd)"
+        exit 1
+    fi
+
+    WORKTREE_PATH="../ralph-wiggum"
+
+    # Error if worktree directory already exists
+    if [ -e "$WORKTREE_PATH" ]; then
+        echo "Error: $WORKTREE_PATH already exists. Remove it first if you want to reinitialize."
+        exit 1
+    fi
+
+    # Error if branch already exists
+    if git show-ref --verify --quiet refs/heads/ralph-wiggum; then
+        echo "Error: branch 'ralph-wiggum' already exists."
+        exit 1
+    fi
+
+    # Create branch from HEAD
+    git branch ralph-wiggum HEAD
+
+    # Create worktree
+    git worktree add "$WORKTREE_PATH" ralph-wiggum
+
+    echo "Worktree created at $WORKTREE_PATH/"
+    echo "Run: cd $WORKTREE_PATH && ralph-wiggum 5"
+}
+
+do_merge() {
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+    # Find the main worktree path (the one on branch "main" or "master")
+    MAIN_DIR=""
+    while IFS= read -r line; do
+        worktree_path=$(echo "$line" | awk '{print $1}')
+        worktree_branch=$(echo "$line" | sed -n 's/.*\[\(.*\)\].*/\1/p')
+        if [ "$worktree_branch" = "main" ] || [ "$worktree_branch" = "master" ]; then
+            MAIN_DIR="$worktree_path"
+            break
+        fi
+    done < <(git worktree list)
+
+    if [ -z "$MAIN_DIR" ]; then
+        echo "Error: could not find a worktree on branch 'main' or 'master'."
+        exit 1
+    fi
+
+    echo "Merging '$BRANCH' into main at $MAIN_DIR..."
+
+    # Merge into main (fails loudly on conflict)
+    git -C "$MAIN_DIR" merge --no-ff "$BRANCH"
+
+    echo "Syncing main back into worktree..."
+
+    # Sync main's state back into worktree so future merges are clean
+    git merge main
+
+    echo ""
+    echo "================================================================"
+    echo "  Merge complete"
+    echo "  Main ($MAIN_DIR) now includes commits from '$BRANCH'"
+    echo "================================================================"
+}
+
+do_run() {
+    REBUILD=0
+    ITERATIONS=1
+
+    # Parse arguments
+    for arg in "$@"; do
+        case "$arg" in
+            --rebuild)
+                REBUILD=1
+                ;;
+            *)
+                if [[ "$arg" =~ ^[0-9]+$ ]]; then
+                    ITERATIONS=$arg
+                else
+                    echo "Usage: ralph-wiggum [--rebuild] [iterations]"
+                    echo "       ralph-wiggum init"
+                    echo "       ralph-wiggum merge"
+                    exit 1
+                fi
+                ;;
+        esac
+    done
+
+    # Validate specs/ exists in CWD
+    if [ ! -d "specs" ]; then
+        echo "Error: no specs/ directory found in $(pwd)"
+        echo "Ralph Wiggum must be run from a project that has a specs/ folder."
+        exit 1
+    fi
+
+    # Build Docker image if missing or --rebuild requested
+    BUILD_NEEDED=0
+    if [ "$REBUILD" -eq 1 ]; then
+        BUILD_NEEDED=1
+    elif ! docker image inspect "$IMAGE_NAME" > /dev/null 2>&1; then
+        BUILD_NEEDED=1
+    fi
+
+    if [ "$BUILD_NEEDED" -eq 1 ]; then
+        echo "Building Docker image '$IMAGE_NAME'..."
+        docker build \
+            -f "$CONFIG_DIR/Dockerfile.claude" \
+            --build-arg USER_ID="$(id -u)" \
+            --build-arg GROUP_ID="$(id -g)" \
+            --build-arg USERNAME="$USERNAME" \
+            -t "$IMAGE_NAME" \
+            "$CONFIG_DIR/"
+        echo "Docker image '$IMAGE_NAME' built."
+    fi
+
+    # Run iterations
+    echo "Starting Ralph Wiggum for $ITERATIONS iterations..."
+
+    for i in $(seq 1 "$ITERATIONS"); do
+        echo ""
+        echo "================================================================"
+        echo "  Ralph Wiggum - Run $i/$ITERATIONS"
+        echo "================================================================"
+        echo ""
+
+        EXIT_CODE=0
+        docker run --rm \
+            -v "$(pwd)":/workspace \
+            -v "$CONFIG_DIR/ralph-wiggum.md":/workspace/ralph-wiggum.md:ro \
+            -v "$CONFIG_DIR/.claude-for-linux":/home/"$USERNAME"/.claude \
+            -e http_proxy \
+            "$IMAGE_NAME" || EXIT_CODE=$?
+
+        if [ "$EXIT_CODE" -ne 0 ]; then
+            echo ""
+            echo "Run $i failed with exit code $EXIT_CODE"
+            echo "Stopping."
+            exit "$EXIT_CODE"
+        fi
+
+        echo ""
+        echo "Run $i completed"
+
+        if [ "$i" -lt "$ITERATIONS" ]; then
+            sleep 2
+        fi
+    done
+
+    echo ""
+    echo "================================================================"
+    echo "  Ralph Wiggum completed $ITERATIONS iterations"
+    echo "================================================================"
+}
+
+case "${1:-}" in
+    init)   do_init ;;
+    merge)  do_merge ;;
+    *)      do_run "$@" ;;
+esac
