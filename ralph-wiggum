@@ -4,7 +4,9 @@ set -euo pipefail
 
 CONFIG_DIR="$HOME/.config/ralph-wiggum"
 IMAGE_NAME="ralph-wiggum"
+IMAGE_NAME_OPENCODE="ralph-wiggum-opencode"
 USERNAME=$(whoami)
+USE_OPENCODE=0
 
 do_init() {
     # Validate: must have a .git/ directory (not bare, not worktree)
@@ -71,19 +73,56 @@ do_init() {
 }
 
 run_docker() {
-    local MOUNT_DIR="$1"
+    local WORK_DIR="$1"
+    local DIRNAME
+    DIRNAME=$(basename "$WORK_DIR")
+    local GIT_FILE="$WORK_DIR/.git"
+    local GITDIR_FILE="$PROJECT_ROOT/.bare/worktrees/$DIRNAME/gitdir"
+
+    # Rewrite git worktree paths so they resolve inside the container
+    local ORIG_DOTGIT="" ORIG_GITDIR=""
+    if [ -f "$GIT_FILE" ]; then
+        ORIG_DOTGIT=$(cat "$GIT_FILE")
+        echo "gitdir: /project/.bare/worktrees/$DIRNAME" > "$GIT_FILE"
+    fi
+    if [ -f "$GITDIR_FILE" ]; then
+        ORIG_GITDIR=$(cat "$GITDIR_FILE")
+        echo "/project/$DIRNAME" > "$GITDIR_FILE"
+    fi
+
     local EXIT_CODE=0
-    docker run --rm \
-        -v "$MOUNT_DIR":/workspace \
-        -v "$CONFIG_DIR/ralph-wiggum.md":/workspace/ralph-wiggum.md:ro \
-        -v "$CONFIG_DIR/.claude-for-linux":/home/"$USERNAME"/.claude \
-        -e http_proxy \
-        "$IMAGE_NAME" || EXIT_CODE=$?
+    if [ "$USE_OPENCODE" -eq 1 ]; then
+        docker run --rm \
+            -v "$PROJECT_ROOT":/project \
+            -w "/project/$DIRNAME" \
+            -v "$CONFIG_DIR/ralph-wiggum.md":"/project/$DIRNAME/ralph-wiggum.md":ro \
+            -v "$CONFIG_DIR/.opencode":/home/"$USERNAME"/.opencode \
+            -e http_proxy \
+            "$IMAGE_NAME_OPENCODE" || EXIT_CODE=$?
+    else
+        docker run --rm \
+            -v "$PROJECT_ROOT":/project \
+            -w "/project/$DIRNAME" \
+            -v "$CONFIG_DIR/ralph-wiggum.md":"/project/$DIRNAME/ralph-wiggum.md":ro \
+            -v "$CONFIG_DIR/.claude-for-linux":/home/"$USERNAME"/.claude \
+            -e http_proxy \
+            "$IMAGE_NAME" || EXIT_CODE=$?
+    fi
+
+    # Restore original git paths
+    if [ -n "$ORIG_DOTGIT" ]; then
+        echo "$ORIG_DOTGIT" > "$GIT_FILE"
+    fi
+    if [ -n "$ORIG_GITDIR" ]; then
+        echo "$ORIG_GITDIR" > "$GITDIR_FILE"
+    fi
+
     return "$EXIT_CODE"
 }
 
 do_run() {
     REBUILD=0
+    REBUILD_OPENCODE=0
     ITERATIONS=1
 
     # Parse arguments
@@ -92,11 +131,17 @@ do_run() {
             --rebuild)
                 REBUILD=1
                 ;;
+            --opencode)
+                USE_OPENCODE=1
+                ;;
+            --build-opencode)
+                REBUILD_OPENCODE=1
+                ;;
             *)
                 if [[ "$arg" =~ ^[0-9]+$ ]]; then
                     ITERATIONS=$arg
                 else
-                    echo "Usage: ralph-wiggum [--rebuild] [iterations]"
+                    echo "Usage: ralph-wiggum [--rebuild] [--opencode] [--build-opencode] [iterations]"
                     echo "       ralph-wiggum init"
                     exit 1
                 fi
@@ -129,15 +174,23 @@ do_run() {
 
     mkdir -p "$MAIN_DIR/.ralph-wiggum"
 
-    # Build Docker image if missing or --rebuild requested
-    BUILD_NEEDED=0
-    if [ "$REBUILD" -eq 1 ]; then
-        BUILD_NEEDED=1
-    elif ! docker image inspect "$IMAGE_NAME" > /dev/null 2>&1; then
-        BUILD_NEEDED=1
+    # Build opencode Docker image if --build-opencode or --opencode requested
+    if [ "$REBUILD_OPENCODE" -eq 1 ] || [ "$USE_OPENCODE" -eq 1 ]; then
+        if [ "$REBUILD_OPENCODE" -eq 1 ] || ! docker image inspect "$IMAGE_NAME_OPENCODE" > /dev/null 2>&1; then
+            echo "Building Docker image '$IMAGE_NAME_OPENCODE'..."
+            docker build \
+                -f "$CONFIG_DIR/Dockerfile.opencode" \
+                --build-arg USER_ID="$(id -u)" \
+                --build-arg GROUP_ID="$(id -g)" \
+                --build-arg USERNAME="$USERNAME" \
+                -t "$IMAGE_NAME_OPENCODE" \
+                "$CONFIG_DIR/"
+            echo "Docker image '$IMAGE_NAME_OPENCODE' built."
+        fi
     fi
 
-    if [ "$BUILD_NEEDED" -eq 1 ]; then
+    # Build claude Docker image if --rebuild or default (not --opencode)
+    if [ "$REBUILD" -eq 1 ]; then
         echo "Building Docker image '$IMAGE_NAME'..."
         docker build \
             -f "$CONFIG_DIR/Dockerfile.claude" \
@@ -147,6 +200,19 @@ do_run() {
             -t "$IMAGE_NAME" \
             "$CONFIG_DIR/"
         echo "Docker image '$IMAGE_NAME' built."
+    elif [ "$USE_OPENCODE" -eq 0 ]; then
+        # Only check for claude image if not using opencode
+        if ! docker image inspect "$IMAGE_NAME" > /dev/null 2>&1; then
+            echo "Building Docker image '$IMAGE_NAME'..."
+            docker build \
+                -f "$CONFIG_DIR/Dockerfile.claude" \
+                --build-arg USER_ID="$(id -u)" \
+                --build-arg GROUP_ID="$(id -g)" \
+                --build-arg USERNAME="$USERNAME" \
+                -t "$IMAGE_NAME" \
+                "$CONFIG_DIR/"
+            echo "Docker image '$IMAGE_NAME' built."
+        fi
     fi
 
     # Run iterations
@@ -245,7 +311,8 @@ do_run() {
             echo "" >> "$MAIN_DIR/.ralph-wiggum/completed.txt"
 
             # Remove worktree and branch
-            git worktree remove "$FEATURE_WORKTREE"
+            git worktree remove --force "$FEATURE_WORKTREE" 2>/dev/null \
+                || { rm -rf "$FEATURE_WORKTREE"; git worktree prune; }
             git branch -d "$FEATURE_BRANCH"
 
             echo "Merged and cleaned up worktree for $FEATURE_BRANCH"

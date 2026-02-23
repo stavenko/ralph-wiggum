@@ -1,0 +1,62 @@
+# Ralph Wiggum - Opencode Development Environment
+# Standalone TDD agent Docker image (installed via install.sh)
+
+FROM rust:bookworm
+
+# Build arguments for user mapping
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+ARG USERNAME=developer
+
+# Install Node.js (required for some tools)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Opencode CLI
+RUN curl -sLs https://get.opencode.ai/launch.sh | sh
+
+# Install additional Rust components
+RUN rustup component add clippy rustfmt \
+    && cargo install cargo-watch
+
+# Install common build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libpq-dev \
+    sudo \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create user with matching UID/GID
+# Use existing group if GID exists, use numeric IDs for chown
+RUN groupadd -g ${GROUP_ID} ${USERNAME} 2>/dev/null || true \
+    && useradd -m -u ${USER_ID} -g ${GROUP_ID} -s /bin/bash ${USERNAME} \
+    && mkdir -p /home/${USERNAME}/.opencode \
+    && mkdir -p /home/${USERNAME}/.cargo \
+    && chown -R ${USER_ID}:${GROUP_ID} /home/${USERNAME}
+
+# Copy Rust toolchain to user's cargo directory
+RUN cp -r /usr/local/cargo/* /home/${USERNAME}/.cargo/ \
+    && chown -R ${USER_ID}:${GROUP_ID} /home/${USERNAME}/.cargo
+
+# Set environment for the user
+ENV CARGO_HOME=/home/${USERNAME}/.cargo
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV PATH="/home/${USERNAME}/.cargo/bin:/usr/local/opencode:${PATH}"
+
+# Switch to non-root user
+USER ${USER_ID}
+
+# Set working directory
+WORKDIR /workspace
+
+# Entrypoint: copy .opencode.json from mount if provided
+ENTRYPOINT ["sh", "-c", "\
+    if [ -f /home/${USERNAME}/.opencode/config.json ]; then \
+        cp /home/${USERNAME}/.opencode/config.json /home/${USERNAME}/.opencode/settings.json; \
+    fi; \
+    exec opencode \"$@\"", "--"]
+CMD ["--system-prompts", "./ralph-wiggum.md", "-p", "Execute the next task from .ralph-wiggum/progress.md immediately. Do not summarize or ask questions."]
