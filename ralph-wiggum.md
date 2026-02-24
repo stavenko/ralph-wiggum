@@ -73,6 +73,16 @@ Each feature is complete when:
 
 ---
 
+## 2.1. Critical Rules
+
+**Tests MUST NEVER be skipped.** If a test is skipped, it is a failure. The only acceptable reason to skip a test is if it is explicitly marked as `@ignore` with a documented reason WHY it cannot be run in the current environment.
+
+**For integration tests**, create or update `docker-compose.yml` with required services (databases, message queues, mocks like mailhog, etc.). Run `docker compose up -d` before executing tests.
+
+**Docker socket is mounted** at `/var/run/docker.sock` - use it to spin up containers for integration tests from within the dev container.
+
+---
+
 ## 3. Folder Structure
 
 ```
@@ -164,26 +174,34 @@ When `.ralph-wiggum/PICK-NEXT-FEATURE` does NOT exist, and `.ralph-wiggum/progre
 
 When `.ralph-wiggum/progress.md` has unchecked `[ ]` tasks:
 
-1. **Find first unchecked task** `[ ] FN-XX-task-name.md`
-2. **Read task file**
-3. **Execute based on task type**:
+1. **Start integration test services**
+   - If `docker-compose.yml` exists → run `docker compose up -d`
+   - Wait for services to be ready
+2. **Find first unchecked task** `[ ] FN-XX-task-name.md`
+3. **Read task file**
+4. **Execute based on task type**:
    - `*-test-*.md` → RED: write tests that FAIL
    - `*-implement-*.md` → GREEN: make tests PASS
    - `*-review-*.md` → REFACTOR: review previous commit
    - `*-feature-perfection-review.md` → Feature completion check (see 5.3)
-4. **Verify acceptance criteria**
-5. **Mark task complete**: `[x] FN-XX-task-name.md`
-6. **Commit**: `git add -A && git commit -m "ralph: FN-XX-task-name"`
-7. **Exit**
+5. **Verify acceptance criteria**
+6. **Mark task complete**: `[x] FN-XX-task-name.md`
+7. **Commit**: `git add -A && git commit -m "ralph: FN-XX-task-name"`
+8. **Exit**
 
 ### 5.3 Feature Perfection Review
 
 When executing `*-feature-perfection-review.md`:
 
-1. **Run all project tests**
-   - If any test fails → create fix tasks, EXIT
+1. **Start integration test services**
+   - If `docker-compose.yml` exists → run `docker compose up -d`
+   - Wait for services to be ready
 
-2. **Check test coverage** against feature requirements:
+2. **Run all project tests**
+   - If any test fails → create fix tasks, EXIT
+   - If any test is skipped → mark as FAIL, create fix task, EXIT
+
+3. **Check test coverage** against feature requirements:
    - Read the feature section from specs/features.md
    - Verify each requirement has a corresponding test
    - If missing tests → create test tasks, EXIT

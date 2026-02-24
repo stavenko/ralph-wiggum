@@ -93,6 +93,7 @@ run_docker() {
     local EXIT_CODE=0
     if [ "$USE_OPENCODE" -eq 1 ]; then
         docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PROJECT_ROOT":/project \
             -w "/project/$DIRNAME" \
             -v "$CONFIG_DIR/ralph-wiggum.md":"/project/$DIRNAME/ralph-wiggum.md":ro \
@@ -101,6 +102,7 @@ run_docker() {
             "$IMAGE_NAME_OPENCODE" || EXIT_CODE=$?
     else
         docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PROJECT_ROOT":/project \
             -w "/project/$DIRNAME" \
             -v "$CONFIG_DIR/ralph-wiggum.md":"/project/$DIRNAME/ralph-wiggum.md":ro \
