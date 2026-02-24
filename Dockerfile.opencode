@@ -17,7 +17,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Install Opencode CLI (download .deb and extract binary)
 RUN curl -sL https://github.com/anomalyco/opencode/releases/download/v1.2.10/opencode-desktop-linux-arm64.deb -o /tmp/opencode.deb \
     && dpkg -x /tmp/opencode.deb /tmp/opencode \
-    && mv /tmp/opencode/usr/bin/opencode-desktop /usr/local/bin/opencode \
+    && mv /tmp/opencode/usr/bin/opencode-cli /usr/local/bin/opencode \
     && rm -rf /tmp/opencode /tmp/opencode.deb
 
 # Install additional Rust components

@@ -179,6 +179,7 @@ do_run() {
         if [ "$REBUILD_OPENCODE" -eq 1 ] || ! docker image inspect "$IMAGE_NAME_OPENCODE" > /dev/null 2>&1; then
             echo "Building Docker image '$IMAGE_NAME_OPENCODE'..."
             docker build \
+                --no-cache \
                 -f "$CONFIG_DIR/Dockerfile.opencode" \
                 --build-arg USER_ID="$(id -u)" \
                 --build-arg GROUP_ID="$(id -g)" \
