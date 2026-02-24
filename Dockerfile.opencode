@@ -64,4 +64,4 @@ ENTRYPOINT ["sh", "-c", "\
         cp /home/${USERNAME}/.opencode/config.json /home/${USERNAME}/.opencode/settings.json; \
     fi; \
     exec opencode \"$@\"", "--"]
-CMD ["--system-prompts", "./ralph-wiggum.md", "-p", "Execute the next task from .ralph-wiggum/progress.md immediately. Do not summarize or ask questions."]
+CMD ["-p", "./ralph-wiggum.md", "Execute the next task from .ralph-wiggum/progress.md immediately. Do not summarize or ask questions."]
